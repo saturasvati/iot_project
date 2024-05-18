@@ -2,6 +2,7 @@ import pymongo
 import datetime
 import numpy as np
 import abc
+import requests
 
 
 class DatabaseLink:
@@ -30,84 +31,110 @@ class DatabaseLink:
 
 class Sensor(abc.ABC):
     """АБК датчика"""
+    _tokens = []
+
     @abc.abstractmethod
-    def redefinition_token():
+    def add_token(self, token):
         """Изменить токен авторизации"""
-        pass
+        self._tokens.append(token)
 
     @abc.abstractmethod
-    def redefinition_address():
-        """Изменить сетевой адрес"""
-        pass
+    def remove_token(self, token):
+        """Отозвать токен авторизации"""
+        self._tokens.remove(token)
 
     @abc.abstractmethod
-    def deactivate():
-        """Удалить токен авторизации"""
-        pass
-
-    @abc.abstractmethod
-    def measurement():
-        """Провести измерения"""
-        pass
+    def check_token(self, token):
+        """Проверить токен"""
+        return token in self._tokens
 
     @abc.abstractmethod
     def validate():
         """Утвердить данные"""
-        pass
 
     @abc.abstractmethod
     def save():
         """Сохранить данные в БД"""
-        pass
 
-
-class Executor(abc.ABC):
-    """АБК исполнительного устройства"""
     @abc.abstractmethod
-    def redefinition_token():
+    def get_tail():
+        """Получить последние записи из БД"""
+
+    @abc.abstractmethod
+    def get_last():
+        """Получить последнее значение за период"""
+
+    @abc.abstractmethod
+    def get_trend():
+        """Получить производную по времени"""
+
+
+class Executor:
+    """Класс исполнительного устройства"""
+
+    def __init__(self, name, address: str, token) -> None:
+        self.name = name
+        self.address = address
+        self.token = token
+
+    def redefinition_token(self, token):
         """Изменить токен авторизации"""
-        pass
+        self.token = token
+        print(f"Token of {self.name} changed")
 
-    @abc.abstractmethod
-    def redefinition_address():
+    def redefinition_address(self, address):
         """Изменить сетевой адрес"""
-        pass
+        self.address = address
+        print(f"Net address of {self.name} changed to {address}")
 
-    @abc.abstractmethod
-    def send_command():
+    def send_command(self, value: dict):
         """Отправить команду на ИУ"""
-        pass
+        res = requests.post(f"http://{self.address}", json=value, headers={"Auth": self.token})
+        return res
+
 
 class TemperatureSensor(Sensor):
     """Класс датчика температуры"""
     pass
 
+
 class HumiditySensor(Sensor):
     """Класс датчика влажности"""
     pass
+
 
 class PressureSensor(Sensor):
     """Класс датчика давления"""
     pass
 
+
 class HeaterDevice(Executor):
     """Класс обогревателя"""
     pass
+
 
 class ACDevice(Executor):
     """Класс кондиционера"""
     pass
 
+
+class VentDevice(Executor):
+    """Класс вентилирующего агрегата"""
+    pass
+
+
 class Room:
     """Класс помещения"""
-    _temperature_sensors:list[Sensor] = []
-    _humidity_sensors:list[Sensor] = []
-    _outer_temperature_sensors:list[Sensor] = []
-    _outer_humidity_sensors:list[Sensor] = []
+    _ac_devices: list[ACDevice] = []
+    _heater_device: list[HeaterDevice] = []
+    _vent_device: list[VentDevice] = []
 
     def __init__(self, name: str, db) -> None:
         self.name = name
         self.db = db
+        temperature_sensor = TemperatureSensor()
+        humidity_sensor = HumiditySensor()
+        pressure_sensor = PressureSensor()
         print(f"Created new room named {name}")
 
     def redefine_temperature_requirements(self, inf: float = 20, sup: float = 25, inf_cutoff: float = 21, sup_cutoff: float = 24):
@@ -132,19 +159,14 @@ class Room:
         print(f"Set humidity optimum:\ninf = {inf}\nsup = {
               sup}\nHysteresis:\ninf = {inf_cutoff}\nsup = {sup_cutoff}")
 
-    def add_temperature_sensor(self, sensor:TemperatureSensor):
-        pass
+    def add_ac_devices(self, device: ACDevice):
+        self._ac_devices.append(device)
 
-    def add_humidity_sensor(self, sensor):
-        pass
+    def add_heater_device(self, device: HeaterDevice):
+        self._heater_device.append(device)
 
-    def add_outer_temperature_sensor(self, sensor:TemperatureSensor):
-        pass
-
-    def add_outer_humidity_sensor(self, sensor):
-        pass
-
-
+    def add_vent_device(self, device: VentDevice):
+        self._vent_device.append(device)
 
     def update_atmosphere_parameters(self):
         pass
