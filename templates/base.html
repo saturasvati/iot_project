@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="{{url_for('static',filename='style.css')}}">
+	<title>{% block title %}{% endblock %}</title>
+</head>
+
+<body>
+	<div class="top_line_workspace">
+		<div class="top_line">
+			<span id="top_line_span_1">САРУС</span>
+			<span id="top_line_span_2">{% block header %}{% endblock %}</span>
+		</div>
+	</div>
+	<div class="navigation_workspace">
+		{% include 'navigation.html' %}
+	</div>
+	<div class="main_workspace">
+		{% block main_content %}{% endblock %}
+	</div>
+</body>
+
+</html>

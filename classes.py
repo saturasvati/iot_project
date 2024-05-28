@@ -3,6 +3,8 @@ import datetime
 import numpy as np
 import abc
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import env
 from typing import Literal, TypeAlias
 
@@ -30,7 +32,7 @@ class DatabaseLink:
 
     def send(self, collection: str, value: dict):
         """Создать запись в БД"""
-        value += {"timestamp": datetime.datetime.now()
+        value |= {"timestamp": datetime.datetime.now()
                   }  # Время записи добавляется автоматически
         self.db[collection].insert_one(value)
 
@@ -40,6 +42,18 @@ class DatabaseLink:
     def get(self, collection: str):
         """Получить записи в БД"""
         return list(self.db[collection].find().sort({"date": 1}))
+
+    def check_exist(self, collection, field, value):
+        cursor = self.db[collection].find_one({field: value})
+        if cursor == None:
+            return False
+        if len(cursor) == 0:
+            return False
+        return True
+
+    def export(self):
+        """Экспортировать всю БД"""
+        return dict(self.db)
 
     def get_for_period(self, collection: str, begin: datetime.datetime, end: datetime.datetime = datetime.datetime.now()):
         """Получить записи в БД за данный промежуток времени"""
@@ -56,8 +70,9 @@ class Sensor(abc.ABC):
         self.name = name
         self._token = token
         self.db = db
-        self.db.send(
-            "device", {"name": name, "token": token, "pragma": self.pragma})
+        if not db.check_exist("device", "name", name):
+            self.db.send("device", {"name": name,
+                                    "token": token, "pragma": self.pragma})
 
     @abc.abstractmethod
     def redefinition_token(self, token):
@@ -94,6 +109,7 @@ class Sensor(abc.ABC):
 
 class Executor:
     """Класс исполнительного устройства"""
+    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         self.name = name
@@ -113,13 +129,26 @@ class Executor:
 
     def log_event(self, value: dict):
         self._db.send("log", {"executor": self.name,
-                      "address": self.address}+value)
+                      "address": self.address} | value)
 
     def send_command(self, value: dict):
         """Отправить команду на ИУ"""
-        res = requests.post(
-            f"http://{self.address}", json=value, headers={"Auth": self.token})
+        try:
+            res = requests.post(self.address, json=value,
+                                headers={"Auth": self.token}, timeout=1.5)
+            res = res.json()
+        except:
+            res = {"error": "timeout"}
         return res
+
+    def switch_power(self, power: bool):
+        if self._power_status != power:
+            res = self.send_command({"switch_power": power})
+        self._power_status = power
+        self.log_event({"command": {"switch_power": power}, "answer": res})
+
+    def get_power_status(self):
+        return self._power_status
 
 
 class TemperatureSensor(Sensor):
@@ -136,20 +165,24 @@ class TemperatureSensor(Sensor):
     def save(self, data):
         self.db.send("temperature", {"temperature": data, "sensor": self.name})
 
-    def get_average(self, period):
+    def get_average(self, period: datetime.timedelta):
         records = self.db.get_for_period(
-            "temperature", datetime.datetime.now()-period, datetime.datetime.now())
+            "temperature", datetime.datetime.now() - period, datetime.datetime.now())
         try:
             len(records) > 0
         except:
             IndexError
         values = [x["temperature"] for x in records]
-        average = sum(values)/len(values)
+        try:
+            average = sum(values)/len(values)
+        except:
+            ZeroDivisionError
+            average = None
         return average
 
-    def get_trend(self, period):
+    def get_trend(self, period: datetime.timedelta):
         records = self.db.get_for_period(
-            "temperature", datetime.datetime.now()-period, datetime.datetime.now())
+            "temperature", datetime.datetime.now() - period, datetime.datetime.now())
         try:
             len(records) > 0
         except:
@@ -163,6 +196,12 @@ class TemperatureSensor(Sensor):
         trend = self.get_trend(period)
         forecast = trend * period_forecast.seconds + average
         return forecast
+
+    def redefinition_token(self, token):
+        return super().redefinition_token(token)
+
+    def remove_token(self):
+        return super().remove_token()
 
 
 class HumiditySensor(Sensor):
@@ -186,7 +225,11 @@ class HumiditySensor(Sensor):
         except:
             IndexError
         values = [x["humidity"] for x in records]
-        average = sum(values)/len(values)
+        try:
+            average = sum(values)/len(values)
+        except:
+            ZeroDivisionError
+            average = None
         return average
 
     def get_trend(self, period: datetime):
@@ -206,10 +249,170 @@ class HumiditySensor(Sensor):
         forecast = trend * period_forecast.seconds + average
         return forecast
 
+    def redefinition_token(self, token):
+        return super().redefinition_token(token)
+
+    def remove_token(self):
+        return super().remove_token()
+
+
+class TemperatureSensorOuter(Sensor):
+    """Класс датчика температуры"""
+
+    pragma = "temperature_outer"
+
+    def __init__(self, name, token, db: DatabaseLink):
+        super().__init__(name, token, db)
+
+    def validate(self, data) -> bool:
+        return data < 100 and data > -60
+
+    def save(self, data):
+        self.db.send("temperature_outer", {
+                     "temperature_outer": data, "sensor": self.name})
+
+    def get_average(self, period):
+        records = self.db.get_for_period(
+            "temperature_outer", datetime.datetime.now()-period, datetime.datetime.now())
+        try:
+            len(records) > 0
+        except:
+            IndexError
+        values = [x["temperature_outer"] for x in records]
+        try:
+            average = sum(values)/len(values)
+        except:
+            ZeroDivisionError
+            average = None
+        return average
+
+    def get_trend(self, period):
+        records = self.db.get_for_period(
+            "temperature_outer", datetime.datetime.now()-period, datetime.datetime.now())
+        try:
+            len(records) > 0
+        except:
+            IndexError
+        values = [x["temperature_outer"] for x in records]
+        dates = [x["date"].timestamp() for x in records]
+        return quick_lstsq(values, dates)
+
+    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+        average = self.get_average(period)
+        trend = self.get_trend(period)
+        forecast = trend * period_forecast.seconds + average
+        return forecast
+
+    def redefinition_token(self, token):
+        return super().redefinition_token(token)
+
+    def remove_token(self):
+        return super().remove_token()
+
+
+class HumiditySensorOuter(Sensor):
+    """Класс датчика влажности"""
+    pragma = "humidity_outer"
+
+    def __init__(self, name, token, db: DatabaseLink):
+        super().__init__(name, token, db)
+
+    def validate(self, data) -> bool:
+        return data < 100 and data > 0
+
+    def save(self, data):
+        self.db.send("humidity_outer", {
+                     "humidity_outer": data, "sensor": self.name})
+
+    def get_average(self, period: datetime):
+        records = self.db.get_for_period(
+            "humidity_outer", datetime.datetime.now()-period, datetime.datetime.now())
+        try:
+            len(records) > 0
+        except:
+            IndexError
+        values = [x["humidity_outer"] for x in records]
+        try:
+            average = sum(values)/len(values)
+        except:
+            ZeroDivisionError
+            average = None
+        return average
+
+    def get_trend(self, period: datetime):
+        records = self.db.get_for_period(
+            "humidity_outer", datetime.datetime.now()-period, datetime.datetime.now())
+        try:
+            len(records) > 0
+        except:
+            IndexError
+        values = [x["humidity_outer"] for x in records]
+        dates = [x["date"].timestamp() for x in records]
+        return quick_lstsq(values, dates)
+
+    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+        average = self.get_average(period)
+        trend = self.get_trend(period)
+        forecast = trend * period_forecast.seconds + average
+        return forecast
+
+    def redefinition_token(self, token):
+        return super().redefinition_token(token)
+
+    def remove_token(self):
+        return super().remove_token()
+
 
 class CO2Sensor(Sensor):
     """Класс датчика давления"""
     pragma = "co2"
+
+    def __init__(self, name, token, db: DatabaseLink):
+        super().__init__(name, token, db)
+
+    def validate(self, data) -> bool:
+        return data < 100e3 and data > 0
+
+    def save(self, data):
+        self.db.send("co2", {"co2": data, "sensor": self.name})
+
+    def get_average(self, period):
+        records = self.db.get_for_period(
+            "co2", datetime.datetime.now()-period, datetime.datetime.now())
+        try:
+            len(records) > 0
+        except:
+            IndexError
+        values = [x["co2"] for x in records]
+        try:
+            average = sum(values)/len(values)
+        except:
+            ZeroDivisionError
+            average = None
+        return average
+
+    def get_trend(self, period):
+        records = self.db.get_for_period(
+            "co2", datetime.datetime.now()-period, datetime.datetime.now())
+        try:
+            len(records) > 0
+        except:
+            IndexError
+        values = [x["co2"] for x in records]
+        dates = [x["date"].timestamp() for x in records]
+        return quick_lstsq(values, dates)
+
+    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+        average = self.get_average(period)
+        trend = self.get_trend(period)
+        forecast = trend * period_forecast.seconds + average
+        return forecast
+
+    def redefinition_token(self, token):
+        return super().redefinition_token(token)
+
+    def remove_token(self):
+        return super().remove_token()
 
     def __init__(self, name, token, db: DatabaseLink):
         super().__init__(name, token, db)
@@ -228,7 +431,11 @@ class CO2Sensor(Sensor):
         except:
             IndexError
         values = [x["co2"] for x in records]
-        average = sum(values)/len(values)
+        try:
+            average = sum(values)/len(values)
+        except:
+            ZeroDivisionError
+            average = None
         return average
 
     def get_trend(self, period):
@@ -251,16 +458,9 @@ class CO2Sensor(Sensor):
 
 class HeaterDevice(Executor):
     """Класс обогревателя"""
-    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
-
-    def switch_power(self, power: bool):
-        if self._power_status != power:
-            res = self.send_command({"switch_power": power})
-        self._power_status = power
-        self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_heating_power(self, heating_power: int):
         res = self.send_command({"heating_power": heating_power})
@@ -270,16 +470,9 @@ class HeaterDevice(Executor):
 
 class ACDevice(Executor):
     """Класс кондиционера"""
-    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
-
-    def switch_power(self, power: bool):
-        if self._power_status != power:
-            res = self.send_command({"switch_power": power})
-        self._power_status = power
-        self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_temperature(self, temperature: int):
         res = self.send_command({"set_temperature": temperature})
@@ -289,16 +482,9 @@ class ACDevice(Executor):
 
 class VentDevice(Executor):
     """Класс вентилирующего агрегата"""
-    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
-
-    def switch_power(self, power: bool):
-        if self._power_status != power:
-            res = self.send_command({"switch_power": power})
-        self._power_status = power
-        self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_speed(self, speed: int):
         res = self.send_command({"set_speed": speed})
@@ -307,16 +493,9 @@ class VentDevice(Executor):
 
 class Humidifier(Executor):
     """Класс увлажнителя воздуха"""
-    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
-
-    def switch_power(self, power: bool):
-        if self._power_status != power:
-            res = self.send_command({"switch_power": power})
-        self._power_status = power
-        self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_volume(self, volume: int):
         res = self.send_command({"set_volume": volume})
@@ -329,7 +508,7 @@ class Room:
     _autocontrol_ac: bool = False
     _autocontrol_vent: bool = False
     _autocontrol_humidifier: bool = False
-
+    _tokens = []
     report = {}
 
     FuzzyAssessment: TypeAlias = Literal['tooLow', 'optimum', 'tooHigh']
@@ -379,9 +558,9 @@ class Room:
         print(f"Created new room named {name}")
 
     def make_token_list(self):
-        records = self.db.get("sensor")
+        records = self.db.get("device")
         pragma = {"temperature": self.temperature_sensor,
-                  "humidity": self.humidity_sensor, "carbondioxide": self.co2_sensor}
+                  "humidity": self.humidity_sensor, "co2": self.co2_sensor, "temperature_outer": self.temperature_sensor_outer, "humidity_outer": self.humidity_sensor_outer}
         self._tokens = {record["token"]: pragma[record["pragma"]]
                         for record in records}
 
@@ -395,6 +574,16 @@ class Room:
         sensor.save(data)
         return True
 
+    def get_history(self, period):
+        history = {}
+        history |= self.db.get("temperature")
+        history |= self.db.get("humidity")
+        history |= self.db.get("temperature_outer")
+        history |= self.db.get("humidity_outer")
+        history |= self.db.get("co2")
+        history |= self.db.get("device")
+        history |= self.db.get("log")
+
     def set_temperature_sensor(self, name, token):
         sensor = TemperatureSensor(name, token, self.db)
         self.temperature_sensor = sensor
@@ -404,11 +593,11 @@ class Room:
         self.humidity_sensor = sensor
 
     def set_temperature_sensor_outer(self, name, token):
-        sensor = TemperatureSensor(name, token, self.db)
+        sensor = TemperatureSensorOuter(name, token, self.db)
         self.temperature_sensor_outer = sensor
 
     def set_humidity_sensor_outer(self, name, token):
-        sensor = HumiditySensor(name, token, self.db)
+        sensor = HumiditySensorOuter(name, token, self.db)
         self.humidity_sensor_outer = sensor
 
     def set_co2_sensor(self, name, token):
@@ -430,6 +619,22 @@ class Room:
     def set_humidifier_device(self, name, address, token):
         device = Humidifier(name, address, token, self.db)
         self.humidifier_device = device
+
+    def set_heater_power(self, setting):
+        self.heater_device.set_heating_power(setting)
+        pass
+
+    def set_ac_temperature(self, setting):
+        self.ac_device.set_temperature(setting)
+        pass
+
+    def set_vent_speed(self, setting):
+        self.vent_device.set_speed(setting)
+        pass
+
+    def set_humidifier_volume(self, setting):
+        self.humidifier_device.set_volume(setting)
+        pass
 
     def set_autocontrol(self, heater: bool = False, ac: bool = False, vent: bool = False, humidifier: bool = False):
         self._autocontrol_heater = heater
@@ -463,7 +668,7 @@ class Room:
             assessment = "optimum"
         return assessment
 
-    def make_report(self, period: datetime = datetime.time(minute=10)):
+    def make_report(self, period: datetime = datetime.timedelta(minutes=10)):
         """Составить оценку атмосферных параметров"""
 
         if not self.temperature_sensor:

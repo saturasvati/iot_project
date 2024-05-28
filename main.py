@@ -8,9 +8,6 @@ import env
 db = DatabaseLink(database=env.DB_DATABASE, host=env.DB_HOST,
                   username=env.DB_USERNAME, password=env.DB_PASSWORD)
 
-tokens_catch = db.get_tokens()
-rooms: list[Room] = {}
-
 # Make room "Main"
 room = Room("main", db)
 
@@ -26,11 +23,11 @@ room.set_co2_sensor("carbondioxide",
                     env.SENSOR_CO2_TOKEN)
 
 room.set_ac_devices("battery_relay",
-                    env.EXECUTOR_HEATER_ADDRESS,
-                    env.EXECUTOR_HEATER_TOKEN)
+                    env.EXECUTOR_AC_ADDRESS,
+                    env.EXECUTOR_AC_TOKEN)
 room.set_heater_device("conditioner",
-                       env.EXECUTOR_AC_ADDRESS,
-                       env.EXECUTOR_AC_TOKEN)
+                       env.EXECUTOR_HEATER_ADDRESS,
+                       env.EXECUTOR_HEATER_TOKEN)
 room.set_vent_device("window_opener",
                      env.EXECUTOR_VENT_ADDRESS,
                      env.EXECUTOR_VENT_TOKEN)
@@ -38,35 +35,81 @@ room.set_humidifier_device("GARLYN_AirWash_V30",
                            env.EXECUTOR_HUMIDIFIER_ADDRESS,
                            env.EXECUTOR_HUMIDIFIER_TOKEN)
 
-room.set_autocontrol(True,True,True,True)
+room.set_heater_power(400)      # [W]
+room.set_ac_temperature(16)     # [degC]
+room.set_vent_speed(100)        # [%]
+room.set_humidifier_volume(80)  # [%]
 
-rooms.append(room)
+room.make_token_list()
+room.set_autocontrol(True, True, True, True)
 
 # Flask functions
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
+
+# Errors
 
 
-@app.route("/api/<request_room>", methods=["POST"])
-def api_main(request_room):
-    try:
-        rooms[request_room]
-    except KeyError:
-        return Response("Request room not exist", status=404)
-    try:
-        rooms[request_room]
-    except KeyError:
-        return Response("Request room not exist", status=404)
-    body = request.json()
-    token = body["Auth"]
-    area: Room = rooms[request_room]
+@app.errorhandler(404)
+def page_not_found(error):
+    return render_template("error.html", error=404, comment="Ложки не существует")
+
+# API
+
+
+@app.route("/api/device", methods=["POST"])
+def api_device():
+    token = request.form.get("Auth")
     if token == (None or ""):
         return Response("Token is necessary", status=401)
-    auth_success = area.precessing_request(token, body["value"])
+    auth_success = room.precessing_request(token, request.form.get("value"))
     if not auth_success:
         return Response("Token not accepted", status=403)
+    return Response("Created", 201)
 
 
+@app.route("/api/get/report", methods=["GET"])
+def api_get_report():
+    if request.args.get("period"):
+        period = datetime.time.fromisoformat(request.args.get("period"))
+        report = room.make_report(period)
+    else:
+        report = room.make_report()
+    return report
+
+@app.route("/api/get/data", methods=["GET"])
+def api_get_data():
+    pass
+
+@app.route("/api/get/export", methods=["GET"])
+def api_get_history():
+    if request.args.get("period"):
+        period = datetime.time.fromisoformat(request.args.get("period"))
+        report = room.make_report(period)
+    else:
+        report = room.make_report()
+
+# UI
 @app.route("/")
 def main_page():
-    pass
+    return render_template("index.html")
+
+
+@app.route("/report")
+def report_page():
+    return render_template("report.html")
+
+
+@app.route("/devices")
+def devices_page():
+    return render_template("devices.html")
+
+
+@app.route("/settings")
+def settings_page():
+    return render_template("settings.html")
+
+
+if __name__ == '__main__':
+    app.debug = True
+    app.run()

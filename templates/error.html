@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Ошибка{% endblock %}
+{% block header %}Ошибка {{ error }}{% endblock %}
+
+{% block main_content %}
+
+<div>
+	<h1>Ошибка {{ error }}!</h1>
+	<p>{{ comment }}</p>
+	<p><a href="/">Вернуться</a> к истокам бытия</p>
+</div>
+
+{% endblock %}
