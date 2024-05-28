@@ -57,18 +57,18 @@ class Sensor(abc.ABC):
         self._token = token
         self.db = db
         self.db.send(
-            "sensor", {"name": name, "token": token, "pragma": self.pragma})
+            "device", {"name": name, "token": token, "pragma": self.pragma})
 
     @abc.abstractmethod
     def redefinition_token(self, token):
         """Изменить токен авторизации"""
-        self.db.update("sensor", {"name": self.name}, {"token": token})
+        self.db.update("device", {"name": self.name}, {"token": token})
         self._token = token
 
     @abc.abstractmethod
     def remove_token(self):
         """Отозвать токен авторизации"""
-        self.db.update("sensor", {"name": self.name}, {"token": None})
+        self.db.update("device", {"name": self.name}, {"token": None})
         self._token = None
 
     @abc.abstractmethod
@@ -86,6 +86,10 @@ class Sensor(abc.ABC):
     @abc.abstractmethod
     def get_trend(self, period) -> float:
         """Получить производную по времени"""
+
+    @abc.abstractmethod
+    def get_forecast(self, period, period_forecast):
+        """Получить прогноз на заданный промежуток времени"""
 
 
 class Executor:
@@ -154,6 +158,12 @@ class TemperatureSensor(Sensor):
         dates = [x["date"].timestamp() for x in records]
         return quick_lstsq(values, dates)
 
+    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+        average = self.get_average(period)
+        trend = self.get_trend(period)
+        forecast = trend * period_forecast.seconds + average
+        return forecast
+
 
 class HumiditySensor(Sensor):
     """Класс датчика влажности"""
@@ -168,7 +178,7 @@ class HumiditySensor(Sensor):
     def save(self, data):
         self.db.send("humidity", {"humidity": data, "sensor": self.name})
 
-    def get_average(self, period):
+    def get_average(self, period: datetime):
         records = self.db.get_for_period(
             "humidity", datetime.datetime.now()-period, datetime.datetime.now())
         try:
@@ -179,7 +189,7 @@ class HumiditySensor(Sensor):
         average = sum(values)/len(values)
         return average
 
-    def get_trend(self, period):
+    def get_trend(self, period: datetime):
         records = self.db.get_for_period(
             "humidity", datetime.datetime.now()-period, datetime.datetime.now())
         try:
@@ -189,6 +199,12 @@ class HumiditySensor(Sensor):
         values = [x["humidity"] for x in records]
         dates = [x["date"].timestamp() for x in records]
         return quick_lstsq(values, dates)
+
+    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+        average = self.get_average(period)
+        trend = self.get_trend(period)
+        forecast = trend * period_forecast.seconds + average
+        return forecast
 
 
 class CO2Sensor(Sensor):
@@ -226,15 +242,24 @@ class CO2Sensor(Sensor):
         dates = [x["date"].timestamp() for x in records]
         return quick_lstsq(values, dates)
 
+    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+        average = self.get_average(period)
+        trend = self.get_trend(period)
+        forecast = trend * period_forecast.seconds + average
+        return forecast
+
 
 class HeaterDevice(Executor):
     """Класс обогревателя"""
+    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
 
     def switch_power(self, power: bool):
-        res = self.send_command({"switch_power": power})
+        if self._power_status != power:
+            res = self.send_command({"switch_power": power})
+        self._power_status = power
         self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_heating_power(self, heating_power: int):
@@ -245,12 +270,15 @@ class HeaterDevice(Executor):
 
 class ACDevice(Executor):
     """Класс кондиционера"""
+    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
 
     def switch_power(self, power: bool):
-        res = self.send_command({"switch_power": power})
+        if self._power_status != power:
+            res = self.send_command({"switch_power": power})
+        self._power_status = power
         self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_temperature(self, temperature: int):
@@ -261,12 +289,15 @@ class ACDevice(Executor):
 
 class VentDevice(Executor):
     """Класс вентилирующего агрегата"""
+    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
 
     def switch_power(self, power: bool):
-        res = self.send_command({"switch_power": power})
+        if self._power_status != power:
+            res = self.send_command({"switch_power": power})
+        self._power_status = power
         self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_speed(self, speed: int):
@@ -276,12 +307,15 @@ class VentDevice(Executor):
 
 class Humidifier(Executor):
     """Класс увлажнителя воздуха"""
+    _power_status = False
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         super().__init__(name, address, _token, _db)
 
     def switch_power(self, power: bool):
-        res = self.send_command({"switch_power": power})
+        if self._power_status != power:
+            res = self.send_command({"switch_power": power})
+        self._power_status = power
         self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def set_volume(self, volume: int):
@@ -298,69 +332,42 @@ class Room:
 
     report = {}
 
-    FuzzyAssessment: TypeAlias = Literal['tooLow', 'infBorder', 'optimum',
-                                         'supBorder', 'tooHigh']
+    FuzzyAssessment: TypeAlias = Literal['tooLow', 'optimum', 'tooHigh']
     DangerAssessment: TypeAlias = Literal['optimum', 'acceptable',
                                           'harmful', 'danger']
-    TrendAssessment: TypeAlias = Literal['falling', 'constant', 'rising']
 
     def redefine_temperature_requirements(self,
                                           inf: float = env.TEMPERATURE_LEVEL_INF,
-                                          sup: float = env.TEMPERATURE_LEVEL_SUP,
-                                          inf_cutoff: float = env.TEMPERATURE_LEVEL_INF_CUTOFF,
-                                          sup_cutoff: float = env.TEMPERATURE_LEVEL_SUP_CUTOFF,
-                                          rising: float = env.TEMPERATURE_TREND_RISING,
-                                          falling: float = env.TEMPERATURE_TREND_FALLING):
+                                          sup: float = env.TEMPERATURE_LEVEL_SUP):
         """Установить требования температурного режима"""
         # Оптимальные значения температуры
         self._temperature_requirement_inf = inf  # минимальное
         self._temperature_requirement_sup = sup  # максимальное
-        # Параметры управления гистерезисом
-        self._temperature_requirement_inf_cutoff = inf_cutoff  # минимальное отсечки
-        self._temperature_requirement_sup_cutoff = sup_cutoff  # максимальное отсечки
-        # Параметры границ производных
-        self._temperature_requirement_rising = rising
-        self._temperature_requirement_falling = falling
-        print(f"Set temperature optimum:\ninf = {inf}\nsup = {sup}\n" +
-              f"Hysteresis:\ninf = {inf_cutoff}\nsup = {sup_cutoff}" +
-              f"Trends:\nrising = {rising*3600}\nfalling = {falling*3600}")
+        print(f"Set temperature optimum:\ninf = {inf}\nsup = {sup}\n")
 
     def redefine_humidity_requirements(self,
                                        inf: float = env.HUMIDITY_LEVEL_INF,
-                                       sup: float = env.HUMIDITY_LEVEL_SUP,
-                                       inf_cutoff: float = env.HUMIDITY_LEVEL_INF_CUTOFF,
-                                       sup_cutoff: float = env.HUMIDITY_LEVEL_SUP_CUTOFF,
-                                       rising: float = env.HUMIDITY_TREND_RISING,
-                                       falling: float = env.HUMIDITY_TREND_FALLING):
+                                       sup: float = env.HUMIDITY_LEVEL_SUP):
         """Установить требования режима влажности воздуха"""
         # Оптимальные значения влажности
         self._humidity_requirement_inf = inf  # минимальное
         self._humidity_requirement_sup = sup  # максимальное
-        # Параметры управления гистерезисом
-        self._humidity_requirement_inf_cutoff = inf_cutoff  # минимальное отсечки
-        self._humidity_requirement_sup_cutoff = sup_cutoff  # максимальное отсечки
-        # Параметры границ производных
-        self._humidity_requirement_rising = rising
-        self._humidity_requirement_falling = falling
-        print(f"Set humidity optimum:\ninf = {inf}\nsup = {sup}\n" +
-              f"Hysteresis:\ninf = {inf_cutoff}\nsup = {sup_cutoff}" +
-              f"Trends:\nrising = {rising*3600}\nfalling = {falling*3600}")
+        print(f"Set humidity optimum:\ninf = {inf}\nsup = {sup}\n")
 
     def redefine_co2_requirements(self,
                                   acceptable: float = env.CO2_LEVEL_ACCEPTABLE,
                                   harmful: float = env.CO2_LEVEL_HARMFUL,
-                                  danger: float = env.CO2_LEVEL_DANGER,
-                                  rising: float = env.CO2_TREND_RISING,
-                                  falling: float = env.CO2_TREND_FALLING):
+                                  danger: float = env.CO2_LEVEL_DANGER):
         """Установить требования режима концентрации углекислоты"""
         self._co2_requirement_acceptable = acceptable  # допустимое
         self._co2_requirement_harmful = harmful  # вредное
         self._co2_requirement_danger = danger  # опасное
-        self._co2_requirement_rising = rising
-        self._co2_requirement_falling = falling
         print(f"Set CO2 requirements:\nacceptable = {acceptable}\n" +
-              f"harmful = {harmful}\ndanger = {danger}\n" +
-              f"Trends:\nrising = {rising*3600}\nfalling = {falling*3600}")
+              f"harmful = {harmful}\ndanger = {danger}\n")
+
+    def redefine_forecast_period(self, period: datetime.timedelta =
+                                 datetime.timedelta(minutes=5)):
+        self._forecast_period = period
 
     def __init__(self, name: str, db):
         self.name = name
@@ -368,39 +375,60 @@ class Room:
         self.redefine_temperature_requirements()
         self.redefine_humidity_requirements()
         self.redefine_co2_requirements()
+        self.redefine_forecast_period()
         print(f"Created new room named {name}")
 
-    def is_in_tokens_list(self, token):
-        _tokens = []
-        _tokens += [x._token for x in self._temperature_sensor]
-        _tokens += [x._token for x in self._humidity_sensor]
-        return (token is not (None or "")) and token in _tokens
+    def make_token_list(self):
+        records = self.db.get("sensor")
+        pragma = {"temperature": self.temperature_sensor,
+                  "humidity": self.humidity_sensor, "carbondioxide": self.co2_sensor}
+        self._tokens = {record["token"]: pragma[record["pragma"]]
+                        for record in records}
 
-    def set_temperature_sensor(self, sensor: TemperatureSensor):
+    def is_in_tokens_list(self, token):
+        return (token is not (None or "")) and token in self._tokens
+
+    def precessing_request(self, token, data):
+        if not self.is_in_tokens_list(token):
+            return False
+        sensor: Sensor = self._tokens[token]
+        sensor.save(data)
+        return True
+
+    def set_temperature_sensor(self, name, token):
+        sensor = TemperatureSensor(name, token, self.db)
         self.temperature_sensor = sensor
 
-    def set_humidity_sensor(self, sensor: HumiditySensor):
+    def set_humidity_sensor(self, name, token):
+        sensor = HumiditySensor(name, token, self.db)
         self.humidity_sensor = sensor
 
-    def set_temperature_sensor_outer(self, sensor: TemperatureSensor):
+    def set_temperature_sensor_outer(self, name, token):
+        sensor = TemperatureSensor(name, token, self.db)
         self.temperature_sensor_outer = sensor
 
-    def set_humidity_sensor_outer(self, sensor: HumiditySensor):
+    def set_humidity_sensor_outer(self, name, token):
+        sensor = HumiditySensor(name, token, self.db)
         self.humidity_sensor_outer = sensor
 
-    def set_co2_sensor(self, sensor: CO2Sensor):
+    def set_co2_sensor(self, name, token):
+        sensor = CO2Sensor(name, token, self.db)
         self.co2_sensor = sensor
 
-    def set_ac_devices(self, device: ACDevice):
+    def set_ac_devices(self, name, address, token):
+        device = ACDevice(name, address, token, self.db)
         self.ac_device = device
 
-    def set_heater_device(self, device: HeaterDevice):
+    def set_heater_device(self, name, address, token):
+        device = HeaterDevice(name, address, token, self.db)
         self.heater_device = device
 
-    def set_vent_device(self, device: VentDevice):
+    def set_vent_device(self, name, address, token):
+        device = VentDevice(name, address, token, self.db)
         self.vent_device = device
 
-    def set_humidifier_device(self, device: Humidifier):
+    def set_humidifier_device(self, name, address, token):
+        device = Humidifier(name, address, token, self.db)
         self.humidifier_device = device
 
     def set_autocontrol(self, heater: bool = False, ac: bool = False, vent: bool = False, humidifier: bool = False):
@@ -410,35 +438,17 @@ class Room:
         self._autocontrol_humidifier = humidifier
 
     def make_temperature_assessment(self, temperature: float) -> FuzzyAssessment:
-        assessment: self.FuzzyAssessment = None
+        assessment: self.FuzzyAssessment = "optimum"
         if temperature > self._temperature_requirement_sup:
             assessment = "tooHigh"
-        if temperature < self._temperature_requirement_sup and \
-                temperature > self._temperature_requirement_sup_cutoff:
-            assessment = "supBorder"
-        if temperature < self._temperature_requirement_sup_cutoff and \
-                temperature > self._temperature_requirement_inf_cutoff:
-            assessment = "optimum"
-        if temperature < self._temperature_requirement_inf_cutoff and \
-                temperature > self._temperature_requirement_inf:
-            assessment = "infBorder"
         if temperature < self._temperature_requirement_sup:
             assessment = "tooLow"
         return assessment
 
     def make_humidity_assessment(self, humidity: float) -> FuzzyAssessment:
-        assessment: self.FuzzyAssessment = None
+        assessment: self.FuzzyAssessment = "optimum"
         if humidity > self._humidity_requirement_sup:
             assessment = "tooHigh"
-        if humidity < self._humidity_requirement_sup and \
-                humidity > self._humidity_requirement_sup_cutoff:
-            assessment = "supBorder"
-        if humidity < self._humidity_requirement_sup_cutoff and \
-                humidity > self._humidity_requirement_inf_cutoff:
-            assessment = "optimum"
-        if humidity < self._humidity_requirement_inf_cutoff and \
-                humidity > self._humidity_requirement_inf:
-            assessment = "infBorder"
         if humidity < self._humidity_requirement_sup:
             assessment = "tooLow"
         return assessment
@@ -451,30 +461,6 @@ class Room:
             assessment = "acceptable"
         if co2 < self._co2_requirement_acceptable:
             assessment = "optimum"
-        return assessment
-
-    def make_temperature_trend_assessment(self, trend: float) -> TrendAssessment:
-        assessment = "constant"
-        if trend > self._temperature_requirement_rising:
-            assessment = "rising"
-        if trend > self._temperature_requirement_falling:
-            assessment = "falling"
-        return assessment
-
-    def make_humidity_trend_assessment(self, trend: float) -> TrendAssessment:
-        assessment = "constant"
-        if trend > self._humidity_requirement_rising:
-            assessment = "rising"
-        if trend > self._humidity_requirement_falling:
-            assessment = "falling"
-        return assessment
-
-    def make_co2_trend_assessment(self, trend: float) -> TrendAssessment:
-        assessment = "constant"
-        if trend > self._co2_requirement_rising:
-            assessment = "rising"
-        if trend > self._co2_requirement_falling:
-            assessment = "falling"
         return assessment
 
     def make_report(self, period: datetime = datetime.time(minute=10)):
@@ -514,14 +500,28 @@ class Room:
         humidity_trend = self.humidity_sensor.get_trend(period)
         co2_trend = self.co2_sensor.get_trend(period)
 
-        temperature_trend_assessment: self.TrendAssessment =\
-            self.make_temperature_trend_assessment(temperature_trend)
-        humidity_trend_assessment: self.TrendAssessment =\
-            self.make_humidity_trend_assessment(humidity_trend)
-        co2_trend_assessment: self.TrendAssessment =\
-            self.make_co2_trend_assessment(co2_trend)
+        temperature_forecast = self.temperature_sensor.get_forecast(
+            period, self._forecast_period)
+        humidity_forecast = self.humidity_sensor.get_forecast(
+            period, self._forecast_period)
+        co2_forecast = self.co2_sensor.get_forecast(
+            period, self._forecast_period)
+
+        temperature_forecast_assessment =\
+            self.make_temperature_assessment(temperature_forecast)
+        humidity_forecast_assessment =\
+            self.make_humidity_assessment(humidity_forecast)
+        co2_forecast_assessment =\
+            self.make_co2_assessment(co2_forecast)
 
         report = {
+            "values": {
+                "temperature": temperature,
+                "humidity": humidity,
+                "co2": co2,
+                "temperature_outer": temperature_outer,
+                "humidity_outer": humidity_outer,
+            },
             "assessment": {
                 "temperature": temperature_assessment,
                 "humidity": humidity_assessment,
@@ -530,10 +530,21 @@ class Room:
                 "humidity_outer": humidity_outer_assessment,
             },
             "trend": {
-                "temperature": temperature_trend_assessment,
-                "humidity": humidity_trend_assessment,
-                "co2": co2_trend_assessment,
+                "temperature": temperature_trend,
+                "humidity": humidity_trend,
+                "co2": co2_trend,
             },
+            "forecast": {
+                "temperature": temperature_forecast,
+                "humidity": humidity_forecast,
+                "co2": co2_forecast,
+            },
+            "forecast_assessment": {
+                "temperature": temperature_forecast_assessment,
+                "humidity": humidity_forecast_assessment,
+                "co2": co2_forecast_assessment,
+            },
+            "forecast_for_period": self._forecast_period,
             "for_moment": datetime.datetime.now(),
             "for_period": period,
         }
@@ -544,20 +555,90 @@ class Room:
 
     def autocontrol(self, report):
         """Использовать ИУ для повышения атмосферных качеств"""
-
-        temperature = report["assessment"]["temperature"]
-        humidity = report["assessment"]["humidity"]
-        co2 = report["assessment"]["co2"]
+        temperature_forecast = report["forecast_assessment"]["temperature"]
+        humidity_forecast = report["forecast_assessment"]["humidity"]
         temperature_outer = report["assessment"]["temperature_outer"]
         humidity_outer = report["assessment"]["humidity_outer"]
+        co2_forecast = report["forecast_assessment"]["co2"]
+        co2 = report["assessment"]["co2"]
 
-        temperature_trend = report["trend"]["temperature"]
-        humidity_trend = report["trend"]["humidity"]
-        co2_trend = report["trend"]["co2"]
+        ac_power: bool = False
+        heater_power: bool = False
+        humidifier_power: bool = False
+        vent_power: bool = False
 
-        if co2 == "danger":
-            self.vent_device.switch_power(True)
-        if co2 == "harmful" and temperature == ("infBorder" or "supBorder"):
-            self.vent_device.switch_power(True)
+        match temperature_forecast:
+            case "tooLow":
+                match humidity_forecast:
+                    case "tooLow":
+                        if temperature_outer != "tooLow" and \
+                                humidity_outer != "tooLow":
+                            vent_power = True
+                        else:
+                            heater_power = True
+                            humidifier_power = True
+                    case "optimum":
+                        if temperature_outer != "tooLow" and \
+                                humidity_outer == "optimum":
+                            vent_power = True
+                        else:
+                            heater_power = True
+                    case "tooHigh":
+                        if temperature_outer != "tooLow" and \
+                                humidity_outer != "tooHigh":
+                            vent_power = True
+                        else:
+                            heater_power = True
+            case "optimum":
+                match humidity_forecast:
+                    case "tooLow":
+                        if temperature_outer == "optimum" and \
+                                humidity_outer != "tooLow":
+                            vent_power = True
+                        else:
+                            humidifier_power = True
+                    case "optimum":
+                        pass
+                    case "tooHigh":
+                        if temperature_outer == "optimum" and \
+                                humidity_outer != "tooHigh":
+                            vent_power = True
+                        else:
+                            pass
+            case "tooHigh":
+                match humidity_forecast:
+                    case "tooLow":
+                        if temperature_outer != "tooHigh" and \
+                                humidity_outer != "tooHigh":
+                            vent_power = True
+                        else:
+                            ac_power = True
+                    case "optimum":
+                        if temperature_outer != "tooHigh" and \
+                                humidity_outer == "optimum":
+                            vent_power = True
+                        else:
+                            ac_power = True
+                    case "tooHigh":
+                        if temperature_outer != "tooHigh" and \
+                                humidity_outer != "tooHigh":
+                            vent_power = True
+                        else:
+                            ac_power = True
 
-        pass
+        if co2_forecast == "danger" or co2 == "danger":
+            vent_power = True
+            if not self._autocontrol_vent:
+                self.vent_device.switch_power(vent_power)
+        if (co2_forecast == "harmful" or co2 == "harmful") and \
+                temperature_forecast == "optimum":
+            vent_power = True
+
+        if self._autocontrol_vent and vent_power:
+            self.vent_device.switch_power(vent_power)
+        if self._autocontrol_ac and ac_power:
+            self.ac_device.switch_power(ac_power)
+        if self._autocontrol_heater and heater_power:
+            self.heater_device.switch_power(heater_power)
+        if self._autocontrol_humidifier and humidifier_power:
+            self.humidifier_device.switch_power(humidifier_power)
