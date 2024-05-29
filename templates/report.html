@@ -4,5 +4,69 @@
 
 {% block main_content %}
 <script src="{{url_for('static',filename='plotly-2.32.0.min.js')}}"></script>
+<script src="{{url_for('static',filename='script.js')}}"></script>
+
+<div>
+    <h1>Краткая сводка</h1>
+
+    <div id="short_summary">
+        <span>🌡 Температура</span>
+        <span>{{ report.value.temperature }}</span>
+        <span>°C</span>
+        <span class="assessment_temperature">{{ report.assessment.temperature }}</span>
+
+        <span>💧 Влажность</span>
+        <span>{{ report.value.humidity }}</span>
+        <span>%</span>
+        <span class="assessment_humidity">{{ report.assessment.humidity }}</span>
+
+        <span>🫧 Углекислый газ</span>
+        <span>{{ report.value.co2 }}</span>
+        <span>ppm</span>
+        <span class="assessment_co2">{{ report.assessment.co2 }}</span>
+    </div>
+    <p>За последние {{ report.for_period / 60 }} минут</p>
+</div>
+
+<div>
+    <h1>На улице</h1>
+
+    <div id="short_summary">
+        <span>🌡 Температура</span>
+        <span>{{ report.value.temperature_outer }}</span>
+        <span>°C</span>
+        <span class="assessment_temperature">{{ report.assessment.temperature_outer }}</span>
+
+        <span>💧 Влажность</span>
+        <span>{{ report.value.humidity_outer }}</span>
+        <span>%</span>
+        <span class="assessment_humidity">{{ report.assessment.humidity_outer }}</span>
+    </div>
+
+    <p>За последние {{ report.for_period / 60 }} минут</p>
+
+</div>
+
+<div>
+    <h1>График</h1>
+    <div>
+        <select name="plot_field" id="plot_field_selector">
+            <option value="temperature">Температура</option>
+            <option value="humidity">Влажность</option>
+            <option value="co2">Свежесть</option>
+            <option value="temperature_outer">Температура (на улице)</option>
+            <option value="humidity_outer">Влажность (на улице)</option>
+        </select>
+        <select name="plot_period" id="plot_period_selector">
+            <option value="1">За час</option>
+            <option value="6">За 6 часов</option>
+            <option value="12">За 12 часов</option>
+            <option value="24">За день</option>
+            <option value="72">за 3 дня</option>
+        </select>
+        <button onclick="make_plot()">Построить</button>
+        <div id="plot_area"></div>
+    </div>
+</div>
 
 {% endblock %}

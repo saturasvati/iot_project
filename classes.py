@@ -7,18 +7,17 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import env
 from typing import Literal, TypeAlias
+import json
 
 
-def quick_lstsq(x: list, y: list):
+def quick_lstsq(values: list, dates: list[datetime.datetime]):
     try:
-        len(x) == len(y)
+        len(values) == len(dates)
     except:
         return IndexError
-    x = np.array(x)
-    y = np.array(y)
-    A = np.vstack([x, np.ones(len(x))]).T
-    k, b = np.linalg.lstsq(A, y, rcond=None)[0]
-    return k
+    A = np.vstack([[x.timestamp() for x in dates], np.ones(len(dates))]).T
+    tg, shift = np.linalg.lstsq(A, values, rcond=None)[0]
+    return (tg, shift)
 
 
 class DatabaseLink:
@@ -32,7 +31,7 @@ class DatabaseLink:
 
     def send(self, collection: str, value: dict):
         """Создать запись в БД"""
-        value |= {"timestamp": datetime.datetime.now()
+        value |= {"date": datetime.datetime.now()
                   }  # Время записи добавляется автоматически
         self.db[collection].insert_one(value)
 
@@ -144,7 +143,8 @@ class Executor:
     def switch_power(self, power: bool):
         if self._power_status != power:
             res = self.send_command({"switch_power": power})
-        self._power_status = power
+            if res.status_code == 200:
+                self._power_status = power
         self.log_event({"command": {"switch_power": power}, "answer": res})
 
     def get_power_status(self):
@@ -172,7 +172,7 @@ class TemperatureSensor(Sensor):
             len(records) > 0
         except:
             IndexError
-        values = [x["temperature"] for x in records]
+        values = [float(x["temperature"]) for x in records]
         try:
             average = sum(values)/len(values)
         except:
@@ -187,11 +187,11 @@ class TemperatureSensor(Sensor):
             len(records) > 0
         except:
             IndexError
-        values = [x["temperature"] for x in records]
-        dates = [x["date"].timestamp() for x in records]
-        return quick_lstsq(values, dates)
+        values = [float(x["temperature"]) for x in records]
+        dates = [x["date"] for x in records]
+        return quick_lstsq(values, dates)[0]
 
-    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+    def get_forecast(self, period: datetime.datetime, period_forecast: datetime.timedelta):
         average = self.get_average(period)
         trend = self.get_trend(period)
         forecast = trend * period_forecast.seconds + average
@@ -217,14 +217,14 @@ class HumiditySensor(Sensor):
     def save(self, data):
         self.db.send("humidity", {"humidity": data, "sensor": self.name})
 
-    def get_average(self, period: datetime):
+    def get_average(self, period: datetime.datetime):
         records = self.db.get_for_period(
             "humidity", datetime.datetime.now()-period, datetime.datetime.now())
         try:
             len(records) > 0
         except:
             IndexError
-        values = [x["humidity"] for x in records]
+        values = [float(x["humidity"]) for x in records]
         try:
             average = sum(values)/len(values)
         except:
@@ -232,18 +232,18 @@ class HumiditySensor(Sensor):
             average = None
         return average
 
-    def get_trend(self, period: datetime):
+    def get_trend(self, period: datetime.datetime):
         records = self.db.get_for_period(
             "humidity", datetime.datetime.now()-period, datetime.datetime.now())
         try:
             len(records) > 0
         except:
             IndexError
-        values = [x["humidity"] for x in records]
-        dates = [x["date"].timestamp() for x in records]
-        return quick_lstsq(values, dates)
+        values = [float(x["humidity"]) for x in records]
+        dates = [x["date"] for x in records]
+        return quick_lstsq(values, dates)[0]
 
-    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+    def get_forecast(self, period: datetime.datetime, period_forecast: datetime.timedelta):
         average = self.get_average(period)
         trend = self.get_trend(period)
         forecast = trend * period_forecast.seconds + average
@@ -278,7 +278,7 @@ class TemperatureSensorOuter(Sensor):
             len(records) > 0
         except:
             IndexError
-        values = [x["temperature_outer"] for x in records]
+        values = [float(x["temperature_outer"]) for x in records]
         try:
             average = sum(values)/len(values)
         except:
@@ -293,11 +293,11 @@ class TemperatureSensorOuter(Sensor):
             len(records) > 0
         except:
             IndexError
-        values = [x["temperature_outer"] for x in records]
-        dates = [x["date"].timestamp() for x in records]
-        return quick_lstsq(values, dates)
+        values = [float(x["temperature_outer"]) for x in records]
+        dates = [x["date"] for x in records]
+        return quick_lstsq(values, dates)[0]
 
-    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+    def get_forecast(self, period: datetime.datetime, period_forecast: datetime.timedelta):
         average = self.get_average(period)
         trend = self.get_trend(period)
         forecast = trend * period_forecast.seconds + average
@@ -324,14 +324,14 @@ class HumiditySensorOuter(Sensor):
         self.db.send("humidity_outer", {
                      "humidity_outer": data, "sensor": self.name})
 
-    def get_average(self, period: datetime):
+    def get_average(self, period: datetime.datetime):
         records = self.db.get_for_period(
             "humidity_outer", datetime.datetime.now()-period, datetime.datetime.now())
         try:
             len(records) > 0
         except:
             IndexError
-        values = [x["humidity_outer"] for x in records]
+        values = [float(x["humidity_outer"]) for x in records]
         try:
             average = sum(values)/len(values)
         except:
@@ -339,18 +339,18 @@ class HumiditySensorOuter(Sensor):
             average = None
         return average
 
-    def get_trend(self, period: datetime):
+    def get_trend(self, period: datetime.datetime):
         records = self.db.get_for_period(
             "humidity_outer", datetime.datetime.now()-period, datetime.datetime.now())
         try:
             len(records) > 0
         except:
             IndexError
-        values = [x["humidity_outer"] for x in records]
-        dates = [x["date"].timestamp() for x in records]
-        return quick_lstsq(values, dates)
+        values = [float(x["humidity_outer"]) for x in records]
+        dates = [x["date"] for x in records]
+        return quick_lstsq(values, dates)[0]
 
-    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+    def get_forecast(self, period: datetime.datetime, period_forecast: datetime.timedelta):
         average = self.get_average(period)
         trend = self.get_trend(period)
         forecast = trend * period_forecast.seconds + average
@@ -383,7 +383,7 @@ class CO2Sensor(Sensor):
             len(records) > 0
         except:
             IndexError
-        values = [x["co2"] for x in records]
+        values = [float(x["co2"]) for x in records]
         try:
             average = sum(values)/len(values)
         except:
@@ -398,11 +398,11 @@ class CO2Sensor(Sensor):
             len(records) > 0
         except:
             IndexError
-        values = [x["co2"] for x in records]
-        dates = [x["date"].timestamp() for x in records]
-        return quick_lstsq(values, dates)
+        values = [float(x["co2"]) for x in records]
+        dates = [x["date"] for x in records]
+        return quick_lstsq(values, dates)[0]
 
-    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
+    def get_forecast(self, period: datetime.datetime, period_forecast: datetime.timedelta):
         average = self.get_average(period)
         trend = self.get_trend(period)
         forecast = trend * period_forecast.seconds + average
@@ -413,47 +413,6 @@ class CO2Sensor(Sensor):
 
     def remove_token(self):
         return super().remove_token()
-
-    def __init__(self, name, token, db: DatabaseLink):
-        super().__init__(name, token, db)
-
-    def validate(self, data) -> bool:
-        return data < 30e3 and data > 0
-
-    def save(self, data):
-        self.db.send("co2", {"co2": data, "sensor": self.name})
-
-    def get_average(self, period):
-        records = self.db.get_for_period(
-            "co2", datetime.datetime.now()-period, datetime.datetime.now())
-        try:
-            len(records) > 0
-        except:
-            IndexError
-        values = [x["co2"] for x in records]
-        try:
-            average = sum(values)/len(values)
-        except:
-            ZeroDivisionError
-            average = None
-        return average
-
-    def get_trend(self, period):
-        records = self.db.get_for_period(
-            "co2", datetime.datetime.now()-period, datetime.datetime.now())
-        try:
-            len(records) > 0
-        except:
-            IndexError
-        values = [x["co2"] for x in records]
-        dates = [x["date"].timestamp() for x in records]
-        return quick_lstsq(values, dates)
-
-    def get_forecast(self, period: datetime, period_forecast: datetime.timedelta):
-        average = self.get_average(period)
-        trend = self.get_trend(period)
-        forecast = trend * period_forecast.seconds + average
-        return forecast
 
 
 class HeaterDevice(Executor):
@@ -510,6 +469,8 @@ class Room:
     _autocontrol_humidifier: bool = False
     _tokens = []
     report = {}
+    report_period = datetime.timedelta(minutes=5)
+    forecast_period = datetime.timedelta(minutes=5)
 
     FuzzyAssessment: TypeAlias = Literal['tooLow', 'optimum', 'tooHigh']
     DangerAssessment: TypeAlias = Literal['optimum', 'acceptable',
@@ -544,8 +505,7 @@ class Room:
         print(f"Set CO2 requirements:\nacceptable = {acceptable}\n" +
               f"harmful = {harmful}\ndanger = {danger}\n")
 
-    def redefine_forecast_period(self, period: datetime.timedelta =
-                                 datetime.timedelta(minutes=5)):
+    def redefine_forecast_period(self, period: datetime.timedelta = forecast_period):
         self._forecast_period = period
 
     def __init__(self, name: str, db):
@@ -574,15 +534,24 @@ class Room:
         sensor.save(data)
         return True
 
-    def get_history(self, period):
+    def get_history(self, period: datetime.timedelta =
+                    datetime.timedelta(hours=6)):
         history = {}
-        history |= self.db.get("temperature")
-        history |= self.db.get("humidity")
-        history |= self.db.get("temperature_outer")
-        history |= self.db.get("humidity_outer")
-        history |= self.db.get("co2")
-        history |= self.db.get("device")
-        history |= self.db.get("log")
+        collections = ["temperature", "humidity", "temperature_outer",
+                       "humidity_outer", "co2", "device", "log"]
+        for table in collections:
+            records = self.db.get_for_period(table,
+                                             datetime.datetime.now() - period,
+                                             datetime.datetime.now())
+            records = [{x:d[x] for x in d if x != '_id'} for d in records]
+            history |= {table:records}
+        return history
+
+    def set_report_period(self, period:datetime.timedelta = datetime.timedelta(minutes=5)):
+        self.report_period = period
+
+    def set_forecast_period(self, period:datetime.timedelta = datetime.timedelta(minutes=5)):
+        self.forecast_period = period
 
     def set_temperature_sensor(self, name, token):
         sensor = TemperatureSensor(name, token, self.db)
@@ -646,7 +615,7 @@ class Room:
         assessment: self.FuzzyAssessment = "optimum"
         if temperature > self._temperature_requirement_sup:
             assessment = "tooHigh"
-        if temperature < self._temperature_requirement_sup:
+        if temperature < self._temperature_requirement_inf:
             assessment = "tooLow"
         return assessment
 
@@ -654,7 +623,7 @@ class Room:
         assessment: self.FuzzyAssessment = "optimum"
         if humidity > self._humidity_requirement_sup:
             assessment = "tooHigh"
-        if humidity < self._humidity_requirement_sup:
+        if humidity < self._humidity_requirement_inf:
             assessment = "tooLow"
         return assessment
 
@@ -668,7 +637,7 @@ class Room:
             assessment = "optimum"
         return assessment
 
-    def make_report(self, period: datetime = datetime.timedelta(minutes=10)):
+    def make_report(self, period: datetime.timedelta = report_period):
         """Составить оценку атмосферных параметров"""
 
         if not self.temperature_sensor:
@@ -718,14 +687,19 @@ class Room:
             self.make_humidity_assessment(humidity_forecast)
         co2_forecast_assessment =\
             self.make_co2_assessment(co2_forecast)
+        
+        vent_power = self.vent_device.get_power_status()
+        ac_power = self.ac_device.get_power_status()
+        heater_power = self.heater_device.get_power_status()
+        humidifier_power = self.humidifier_device.get_power_status()
 
         report = {
-            "values": {
-                "temperature": temperature,
-                "humidity": humidity,
-                "co2": co2,
-                "temperature_outer": temperature_outer,
-                "humidity_outer": humidity_outer,
+            "value": {
+                "temperature": np.round(temperature,1),
+                "humidity": np.round(humidity,0),
+                "co2": np.round(co2,0),
+                "temperature_outer": np.round(temperature_outer,1),
+                "humidity_outer": np.round(humidity_outer,0),
             },
             "assessment": {
                 "temperature": temperature_assessment,
@@ -749,9 +723,15 @@ class Room:
                 "humidity": humidity_forecast_assessment,
                 "co2": co2_forecast_assessment,
             },
-            "forecast_for_period": self._forecast_period,
-            "for_moment": datetime.datetime.now(),
-            "for_period": period,
+            "devices_status": {
+                "vent":vent_power,
+                "ac":ac_power,
+                "heater":heater_power,
+                "humidifier":humidifier_power,
+            },
+            "forecast_for_period": int(self._forecast_period.seconds),
+            "for_moment": datetime.datetime.now().isoformat(),
+            "for_period": int(period.seconds),
         }
 
         self.report = report

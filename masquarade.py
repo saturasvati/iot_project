@@ -16,12 +16,15 @@ m_o_phi = 50
 def make_request(url, m, devi, token):
     val = m + random.randint(-devi, devi)
     data = {"Auth": token, "value": val}
-    res = requests.post(url=url, data=data, timeout=timeout)
+    try:
+        res = requests.post(url=url, data=data, timeout=timeout)
+    except:
+        res = {"error": "timeout"}
     print(f"{res}\t{val}")
 
 
 while True:
-    if int(datetime.datetime.now().timestamp()) % 60 == 0:
+    if int(datetime.datetime.now().timestamp()) % 45 == 0:
         make_request(url, m_t, 1, env.SENSOR_TEMPERATURE_TOKEN)
         make_request(url, m_phi, 4, env.SENSOR_HUMIDITY_TOKEN)
         make_request(url, m_o_t, 1, env.SENSOR_TEMPERATURE_OUTER_TOKEN)

@@ -71,7 +71,7 @@ def api_device():
 @app.route("/api/get/report", methods=["GET"])
 def api_get_report():
     if request.args.get("period"):
-        period = datetime.time.fromisoformat(request.args.get("period"))
+        period = datetime.timedelta(seconds=int(request.args.get("period")))
         report = room.make_report(period)
     else:
         report = room.make_report()
@@ -79,15 +79,12 @@ def api_get_report():
 
 @app.route("/api/get/data", methods=["GET"])
 def api_get_data():
-    pass
-
-@app.route("/api/get/export", methods=["GET"])
-def api_get_history():
     if request.args.get("period"):
-        period = datetime.time.fromisoformat(request.args.get("period"))
-        report = room.make_report(period)
+        period = datetime.timedelta(seconds=int(request.args.get("period")))
+        history = room.get_history(period)
     else:
-        report = room.make_report()
+        history = room.get_history(datetime.timedelta(hours=6))
+    return history
 
 # UI
 @app.route("/")
@@ -97,7 +94,8 @@ def main_page():
 
 @app.route("/report")
 def report_page():
-    return render_template("report.html")
+    report = room.make_report()
+    return render_template("report.html", report=report)
 
 
 @app.route("/devices")
