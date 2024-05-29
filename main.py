@@ -67,6 +67,36 @@ def api_device():
         return Response("Token not accepted", status=403)
     return Response("Created", 201)
 
+@app.route("api/get/device_statistic", methods=["GET"])
+def api_get_devices_statistic():
+    answer = {}
+    report = room.make_report()
+    answer["executor_status"] = report["devices_status"]
+
+    answer["executor_settings"]["ac"] = room.ac_device.settings
+    answer["executor_settings"]["vent"] = room.vent_device.settings
+    answer["executor_settings"]["heater"] = room.heater_device.settings
+    answer["executor_settings"]["humidifier"] = room.humidifier_device.settings
+
+    answer["executor_address"]["ac"] = room.ac_device.address
+    answer["executor_address"]["vent"] = room.vent_device.address
+    answer["executor_address"]["heater"] = room.heater_device.address
+    answer["executor_address"]["humidifier"] = room.humidifier_device.address
+
+    answer["executor_name"]["ac"] = room.ac_device.name
+    answer["executor_name"]["vent"] = room.vent_device.name
+    answer["executor_name"]["heater"] = room.heater_device.name
+    answer["executor_name"]["humidifier"] = room.humidifier_device.name
+
+    answer["executor_autocontrol"]["ac"] = room._autocontrol_ac
+    answer["executor_autocontrol"]["vent"] = room._autocontrol_vent
+    answer["executor_autocontrol"]["heater"] = room._autocontrol_heater
+    answer["executor_autocontrol"]["humidifier"] = room._autocontrol_humidifier
+
+    answer["sensor_name"] = 
+
+    return answer
+
 
 @app.route("/api/get/report", methods=["GET"])
 def api_get_report():

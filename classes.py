@@ -109,6 +109,7 @@ class Sensor(abc.ABC):
 class Executor:
     """Класс исполнительного устройства"""
     _power_status = False
+    settings = None
 
     def __init__(self, name, address: str, _token, _db: DatabaseLink) -> None:
         self.name = name
@@ -149,6 +150,9 @@ class Executor:
 
     def get_power_status(self):
         return self._power_status
+    
+    def get_settings(self):
+        return self.settings
 
 
 class TemperatureSensor(Sensor):
@@ -422,6 +426,7 @@ class HeaterDevice(Executor):
         super().__init__(name, address, _token, _db)
 
     def set_heating_power(self, heating_power: int):
+        self.settings = heating_power
         res = self.send_command({"heating_power": heating_power})
         self.log_event(
             {"command": {"heating_power": heating_power}, "answer": res})
@@ -434,6 +439,7 @@ class ACDevice(Executor):
         super().__init__(name, address, _token, _db)
 
     def set_temperature(self, temperature: int):
+        self.settings = temperature
         res = self.send_command({"set_temperature": temperature})
         self.log_event(
             {"command": {"set_temperature": temperature}, "answer": res})
@@ -446,6 +452,7 @@ class VentDevice(Executor):
         super().__init__(name, address, _token, _db)
 
     def set_speed(self, speed: int):
+        self.settings = speed
         res = self.send_command({"set_speed": speed})
         self.log_event({"command": {"set_speed": speed}, "answer": res})
 
@@ -457,6 +464,7 @@ class Humidifier(Executor):
         super().__init__(name, address, _token, _db)
 
     def set_volume(self, volume: int):
+        self.settings = volume
         res = self.send_command({"set_volume": volume})
         self.log_event({"command": {"set_volume": volume}, "answer": res})
 

@@ -13,21 +13,25 @@
 
 	--a-color: #558ea9;
 
-	--max-width-main-workspace: 800px;
+	--max-width-main-workspace: 900px;
 }
 
 .accent_good {
 	color: var(--accent-good);
 }
+
 .accent_warning {
 	color: var(--accent-warning);
 }
+
 .accent_danger {
 	color: var(--accent-danger);
 }
+
 .accent_cold {
 	color: var(--accent-cold);
 }
+
 .accent_hot {
 	color: var(--accent-hot);
 }
@@ -133,6 +137,38 @@ p {
 
 #short_summary span {
 	margin: 3pt 0;
-	grid-template-columns: repeat(3, 100px);
+	justify-self: left;
+}
+
+#device_command_area {
+	display: grid;
+	grid-template-columns: repeat(7, auto);
+	justify-content: left;
+}
+
+#device_command_area span {
+	margin: 5pt 10pt 5pt 0;
+	justify-self: left;
+}
+
+#sensor_settings_area {
+	display: grid;
+	grid-template-columns: repeat(4, auto);
+	justify-content: left;
+}
+
+#sensor_settings_area span {
+	margin: 5pt 10pt 5pt 0;
+	justify-self: left;
+}
+
+#manually_request_area {
+	display: grid;
+	grid-template-columns: auto auto;
+	justify-content: left;
+}
+
+#manually_request_area span {
+	margin: 5pt 10pt 5pt 0;
 	justify-self: left;
 }

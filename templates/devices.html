@@ -3,9 +3,99 @@
 {% block header %}Устройства{% endblock %}
 
 {% block main_content %}
+<script src="{{url_for('static',filename='script_devices.js')}}"></script>
 
 <div>
-	
+    <h1>Исполнительные устройства</h1>
+    <div id="device_command_area">
+        <span></span>
+        <span>Вкл</span>
+        <span>Авто</span>
+        <span>Работает</span>
+        <span>Настройка</span>
+        <span>Переименовать</span>
+        <span>Переопределить адрес</span>
+
+        <span>Вентиляция</span>
+        <span><input type="checkbox" id="power_check_vent"></span>
+        <span><input type="checkbox" id="autocontrol_check_vent"></span>
+        <span id="power_on_indicator_vent">Нет</span>
+        <span><input type="text" id="setting_value_vent" value="" placeholder="Скорость, %"></span>
+        <span><input type="text" id="rename_vent" placeholder="Переименовать"></span>
+        <span><input type="text" id="redefine_address_vent" placeholder="Переименовать"></span>
+
+        <span>Обогреватель</span>
+        <span><input type="checkbox" id="power_check_heater"></span>
+        <span><input type="checkbox" id="autocontrol_check_heater"></span>
+        <span id="power_on_indicator_heater">Нет</span>
+        <span><input type="text" id="setting_value_heater" value="" placeholder="Мощность, Вт"></span>
+        <span><input type="text" id="rename_heater" placeholder="Переименовать"></span>
+        <span><input type="text" id="redefine_address_heater" placeholder="Переименовать"></span>
+
+        <span>Кондиционер</span>
+        <span><input type="checkbox" id="power_check_ac"></span>
+        <span><input type="checkbox" id="autocontrol_check_ac"></span>
+        <span id="power_on_indicator_ac">Нет</span>
+        <span><input type="text" id="setting_value_ac" value="" placeholder="Температура, С"></span>
+        <span><input type="text" id="rename_ac" placeholder="Переименовать"></span>
+        <span><input type="text" id="redefine_address_ac" placeholder="Переименовать"></span>
+
+        <span>Увлажнитель</span>
+        <span><input type="checkbox" id="power_check_humidifier"></span>
+        <span><input type="checkbox" id="autocontrol_check_humidifier"></span>
+        <span id="power_on_indicator_humidifier">Нет</span>
+        <span><input type="text" id="setting_value_humidifier" value="" placeholder="Мощность, %"></span>
+        <span><input type="text" id="rename_humidifier" placeholder="Переименовать"></span>
+        <span><input type="text" id="redefine_address_humidifier" placeholder="Переименовать"></span>
+    </div>
+    <button onclick="send_manually_command()">Выполнить команду</button>
+</div>
+
+<div>
+    <h1>Датчики</h1>
+    <div id="sensor_settings_area">
+        <span></span>
+        <span>ЗАБЫТЬ</span>
+        <span>Новый токен</span>
+        <span>Переименовать</span>
+
+        <span>Термометр</span>
+        <span><input type="checkbox" id="power_check_termometer"></span>
+        <span><input type="text" id="rename_input_termometer" placeholder="Переопределить токен"></span>
+        <span><input type="text" id="rename_input_termometer" placeholder="Переименовать"></span>
+
+        <span>Гигрометр</span>
+        <span><input type="checkbox" id="power_check_humidity"></span>
+        <span><input type="text" id="rename_input_humidity" placeholder="Переопределить токен"></span>
+        <span><input type="text" id="rename_input_humidity" placeholder="Переименовать"></span>
+
+        <span>Датчик СО2</span>
+        <span><input type="checkbox" id="power_check_humidity_outer"></span>
+        <span><input type="text" id="rename_input_humidity_outer" placeholder="Переопределить токен"></span>
+        <span><input type="text" id="rename_input_humidity_outer" placeholder="Переименовать"></span>
+
+        <span>Термометр (уличный)</span>
+        <span><input type="checkbox" id="power_check_termometer_outer"></span>
+        <span><input type="text" id="rename_input_termometer_outer" placeholder="Переопределить токен"></span>
+        <span><input type="text" id="rename_input_termometer_outer" placeholder="Переименовать"></span>
+
+        <span>Гигрометр (уличный)</span>
+        <span><input type="checkbox" id="power_check_humidifier"></span>
+        <span><input type="text" id="rename_input_humidifier" placeholder="Переопределить токен"></span>
+        <span><input type="text" id="rename_input_humidifier" placeholder="Переименовать"></span>
+    </div>
+    <button onclick="send_sensor_settings()">Выполнить команду</button>
+</div>
+
+<div>
+    <h1>Отправить запрос вручную</h1>
+    <div id="manually_request_area">
+        <span><label for="manually_input_token">Токен: </label></span>
+        <span><input type="text" id="manually_input_token"></span>
+        <span><label for="manually_input_value">Значение: </label></span>
+        <span><input type="text" id="manually_input_value"></span>
+    </div>
+    <button onclick="send_manually_request()">Отправить</button>
 </div>
 
 {% endblock %}
