@@ -113,7 +113,6 @@ function make_plot() {
             console.log(data);
             Plotly.newPlot("plot_area", [data], layout);
         });
-
 }
 
 function init() {

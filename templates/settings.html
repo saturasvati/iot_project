@@ -1,3 +1,61 @@
 {% extends "base.html" %}
 {% block title %}Настройки{% endblock %}
 {% block header %}Настройки{% endblock %}
+
+{% block main_content %}
+<script src="{{url_for('static',filename='script_settings.js')}}"></script>
+
+<div>
+    <h1>Требования к качествам воздуха</h1>
+    <p>Граничное значение</p>
+    <div id="air_settings_area">
+        <span></span>
+        <span class="accent_cold">Нижнее</span>
+        <span class="accent_hot">Верхнее</span>
+        <span></span>
+        <span></span>
+
+        <span>Температура</span>
+        <span><input type="text" id="border_inf_temperature"></span>
+        <span><input type="text" id="border_sup_temperature"></span>
+        <span>°C</span>
+        <span></span>
+
+        <span>Влажность</span>
+        <span><input type="text" id="border_inf_humidity"></span>
+        <span><input type="text" id="border_sup_humidity"></span>
+        <span>%</span>
+        <span></span>
+
+        <span></span>
+        <span class="accent_good">Комфортно</span>
+        <span class="accent_warning">Вредно</span>
+        <span class="accent_danger">Опасно</span>
+        <span></span>
+
+        <span>Свежесть</span>
+        <span><input type="text" id="border_acceptable_co2"></span>
+        <span><input type="text" id="border_harmful_co2"></span>
+        <span><input type="text" id="border_danger_co2"></span>
+        <span>ppm</span>
+
+    </div>
+    <button onclick="send_settings()">Сохранить настройки</button>
+</div>
+
+<div>
+    <h1>Параметры САР</h1>
+    <p>Обработать данные за период</span>
+    <div id="autocontrol_settings_area">
+        <span><label for="period_report">Отчет: </label></span>
+        <span><input type="text" id="period_report"></span>
+        <span>мин</span>
+
+        <span><label for="period_forecast">Прогноз: </label></span>
+        <span><input type="text" id="period_forecast"></span>
+        <span>мин</span>
+    </div>
+    <button onclick="send_settings()">Сохранить настройки</button>
+</div>
+
+{% endblock %}

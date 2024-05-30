@@ -140,20 +140,20 @@ p {
 	justify-self: left;
 }
 
-#device_command_area {
+#executor_command_area {
 	display: grid;
-	grid-template-columns: repeat(7, auto);
+	grid-template-columns: repeat(6, auto);
 	justify-content: left;
 }
 
-#device_command_area span {
+#executor_command_area span {
 	margin: 5pt 10pt 5pt 0;
 	justify-self: left;
 }
 
 #sensor_settings_area {
 	display: grid;
-	grid-template-columns: repeat(4, auto);
+	grid-template-columns: repeat(3, auto);
 	justify-content: left;
 }
 
@@ -169,6 +169,32 @@ p {
 }
 
 #manually_request_area span {
+	margin: 5pt 10pt 5pt 0;
+	justify-self: left;
+}
+
+#autocontrol_settings_area {
+	display: grid;
+	grid-template-columns: auto auto auto;
+	justify-content: left;
+}
+
+#autocontrol_settings_area span {
+	margin: 5pt 10pt 5pt 0;
+	justify-self: left;
+}
+
+#air_settings_area {
+	display: grid;
+	grid-template-columns: repeat(5,auto);
+	justify-content: left;
+}
+
+#air_settings_area input {
+	max-width: 100px;
+}
+
+#air_settings_area span {
 	margin: 5pt 10pt 5pt 0;
 	justify-self: left;
 }
