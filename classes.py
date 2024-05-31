@@ -3,11 +3,8 @@ import datetime
 import numpy as np
 import abc
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import env
 from typing import Literal, TypeAlias
-import json
 
 
 def quick_lstsq(values: list, dates: list[datetime.datetime]):
@@ -31,8 +28,8 @@ class DatabaseLink:
 
     def send(self, collection: str, value: dict):
         """Создать запись в БД"""
-        value |= {"date": datetime.datetime.now()
-                  }  # Время записи добавляется автоматически
+        value |= {"date": datetime.datetime.now(
+        )}  # Время записи добавляется автоматически
         self.db[collection].insert_one(value)
 
     def update(self, collection: str, record: dict, subs: dict):
@@ -49,10 +46,6 @@ class DatabaseLink:
         if len(cursor) == 0:
             return False
         return True
-
-    def export(self):
-        """Экспортировать всю БД"""
-        return dict(self.db)
 
     def get_for_period(self, collection: str, begin: datetime.datetime, end: datetime.datetime = datetime.datetime.now()):
         """Получить записи в БД за данный промежуток времени"""
@@ -167,7 +160,9 @@ class TemperatureSensor(Sensor):
         return data < 100 and data > -60
 
     def save(self, data):
-        self.db.send("temperature", {"temperature": data, "sensor": self.name})
+        if self.validate(data):
+            self.db.send("temperature", {
+                         "temperature": data, "sensor": self.name})
 
     def get_average(self, period: datetime.timedelta):
         records = self.db.get_for_period(
@@ -221,7 +216,8 @@ class HumiditySensor(Sensor):
         return data < 100 and data > 0
 
     def save(self, data):
-        self.db.send("humidity", {"humidity": data, "sensor": self.name})
+        if self.validate(data):
+            self.db.send("humidity", {"humidity": data, "sensor": self.name})
 
     def get_average(self, period: datetime.datetime):
         records = self.db.get_for_period(
@@ -276,8 +272,9 @@ class TemperatureSensorOuter(Sensor):
         return data < 100 and data > -60
 
     def save(self, data):
-        self.db.send("temperature_outer", {
-                     "temperature_outer": data, "sensor": self.name})
+        if self.validate(data):
+            self.db.send("temperature_outer", {
+                "temperature_outer": data, "sensor": self.name})
 
     def get_average(self, period):
         records = self.db.get_for_period(
@@ -331,8 +328,9 @@ class HumiditySensorOuter(Sensor):
         return data < 100 and data > 0
 
     def save(self, data):
-        self.db.send("humidity_outer", {
-                     "humidity_outer": data, "sensor": self.name})
+        if self.validate(data):
+            self.db.send("humidity_outer", {
+                "humidity_outer": data, "sensor": self.name})
 
     def get_average(self, period: datetime.datetime):
         records = self.db.get_for_period(
@@ -386,7 +384,8 @@ class CO2Sensor(Sensor):
         return data < 100e3 and data > 0
 
     def save(self, data):
-        self.db.send("co2", {"co2": data, "sensor": self.name})
+        if self.validate(data):
+            self.db.send("co2", {"co2": data, "sensor": self.name})
 
     def get_average(self, period):
         records = self.db.get_for_period(
@@ -514,7 +513,7 @@ class Room:
     def is_in_tokens_list(self, token):
         return (token is not (None or "")) and token in self._tokens
 
-    def precessing_request(self, token, data):
+    def processing_request(self, token, data):
         if token == ("" or None):
             return 403
         if not self.is_in_tokens_list(token):

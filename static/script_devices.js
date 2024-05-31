@@ -49,11 +49,9 @@ function init_ui(response) {
                         switch (result[prefix][noun]) {
                             case true:
                                 element.checked = true;
-                                console.log(prefix, noun, element.checked);
                                 break;
                             case false:
                                 element.checked = false;
-                                console.log(prefix, noun, element.checked);
                                 break;
                         }
                         break;
@@ -82,7 +80,6 @@ function send_device_settings(response) {
                     case "executor_autocontrol":
                         value = element.checked;
                         if (value != result[prefix][noun]) { new_settings[prefix][noun] = value };
-                        console.log(prefix, noun, result[prefix][noun], new_settings[prefix][noun], value);
                         break;
                     case "executor_setting":
                         value = element.value;
@@ -111,8 +108,6 @@ function send_sensor_settings() {
     for (const prefix of sensor_prefix) {
         for (const noun of sensor_noun) {
             let element = document.getElementById(prefix + "_" + noun);
-            // console.log(element,prefix + "_" + noun);
-            console.log(element, prefix, noun, element.checked);
             switch (prefix) {
                 case "sensor_remove":
                     if (element.checked) { new_settings[prefix][noun] = element.checked };

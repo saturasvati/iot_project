@@ -7,7 +7,6 @@ import env
 
 db = DatabaseLink(database=env.DB_DATABASE, host=env.DB_HOST,
                   username=env.DB_USERNAME, password=env.DB_PASSWORD)
-last_timestamp = datetime.datetime.now().timestamp()
 
 # Make room "Main"
 room = Room("main", db)
@@ -56,7 +55,7 @@ app = Flask(__name__, static_folder="static")
 
 @app.errorhandler(404)
 def page_not_found(error):
-    return render_template("error.html", error=error, comment="Ложки не существует")
+    return render_template("error.html", error=404, comment="Ложки не существует")
 
 # API
 
@@ -65,7 +64,7 @@ def page_not_found(error):
 def api_device_send():
     token = request.json["Auth"]
     value = request.json["value"]
-    code = room.precessing_request(token, value)
+    code = room.processing_request(token, value)
     report = room.make_report()
     room.autocontrol(report)
     return Response(status=code)
@@ -181,11 +180,11 @@ def api_get_settings():
     settings["period"]["report"] = int(settings["period"]["report"])
 
     if room.co2_sensor.validate(settings["co2"]["acceptable"]):
-        room._co2_requirement_acceptable = settings["co2"]["acceptable"]
+        room.co2_requirement_acceptable = settings["co2"]["acceptable"]
     if room.co2_sensor.validate(settings["co2"]["harmful"]):
-        room._co2_requirement_harmful = settings["co2"]["harmful"]
+        room.co2_requirement_harmful = settings["co2"]["harmful"]
     if room.co2_sensor.validate(settings["co2"]["danger"]):
-        room._co2_requirement_danger = settings["co2"]["danger"]
+        room.co2_requirement_danger = settings["co2"]["danger"]
     if room.temperature_sensor.validate(settings["temperature"]["inf"]):
         room.temperature_requirement_inf = settings["temperature"]["inf"]
     if room.temperature_sensor.validate(settings["temperature"]["sup"]):

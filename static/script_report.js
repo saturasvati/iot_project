@@ -110,7 +110,6 @@ function make_plot() {
                 y_array[i] = Number(raw_data[i][field]);
             }
             data = { x: x_array, y: y_array };
-            console.log(data);
             Plotly.newPlot("plot_area", [data], layout);
         });
 }
