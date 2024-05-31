@@ -796,7 +796,7 @@ class Room:
 
         if co2_forecast == "danger" or co2 == "danger":
             vent_power = True
-            if not self._autocontrol_vent:
+            if not self.autocontrol_vent:
                 self.vent_device.switch_power(vent_power)
         if (co2_forecast == "harmful" or co2 == "harmful") and \
                 temperature_forecast == "optimum":
