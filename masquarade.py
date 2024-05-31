@@ -3,6 +3,8 @@ import requests
 import env
 import random
 
+"""Скрипт имитирует отправку данных с блока датчика в целях тестирования"""
+
 url = "http://localhost:5000/api/device/send"
 timeout = 1.5
 
